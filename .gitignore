@@ -1,0 +1,28 @@
+# Environment / secrets
+.env
+.env.local
+*.key
+
+# Binaries
+/bin/
+dist/
+
+# Test & coverage artifacts
+*.out
+*.test
+coverage/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Runtime data: session workspaces, file memory, traces (configs/config.yaml)
+/data/
+
+# Personal Claude Code notes
+CLAUDE.local.md

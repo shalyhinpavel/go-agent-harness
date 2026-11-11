@@ -1,0 +1,162 @@
+# go-agent-harness configuration.
+# Every key can be omitted: built-in defaults (see internal/config) apply.
+# Environment overrides: AGENT_PROVIDER, AGENT_MODEL, AGENT_BASE_URL, AGENT_HOST, PORT.
+# Used by the harness command (go run ./cmd/harness) when run from the repo root.
+
+# The HTTP API has NO authentication. Defaults keep it local: loopback
+# bind, no CORS. Expose it (host 0.0.0.0 / AGENT_HOST) only behind a proxy
+# that authenticates; list browser origins explicitly if a web UI calls it.
+server:
+  host: 127.0.0.1
+  port: 8080
+  cors_origins: []
+  max_body_mb: 20      # attachments ride base64 inside the request body
+  require_approval: false
+  approval_timeout: 5m
+
+provider:
+  # auto | anthropic | openai | openai-compat | openrouter | mock
+  # auto picks by the API key it finds: ANTHROPIC_API_KEY, then
+  # OPENAI_BASE_URL (an OpenAI-compatible server) or OPENAI_API_KEY, then
+  # OPENROUTER_API_KEY; with none it runs the mock, which says so.
+  kind: auto
+  # "" = the kind's default (claude-sonnet-5-5, gpt-5, openrouter/auto);
+  # required for an OpenAI-compatible server.
+  model: ""
+  # Environment variable holding the API key (provider-specific):
+  #   openai/openai-compat: OPENAI_API_KEY
+  #   openrouter:           OPENROUTER_API_KEY
+  #   anthropic:            ANTHROPIC_API_KEY
+  api_key_env: ""
+  # For openai-compat: base URL literal or env var name, e.g.
+  # base_url: http://localhost:11434/v1      (Ollama)
+  # base_url_env: OPENAI_BASE_URL
+  base_url: ""
+  base_url_env: ""
+  # Model context window in tokens; the engine stops with a clear error
+  # before a request would overflow it. 0 disables the guard.
+  context_limit: 0
+  # Sampling and reasoning knobs sent with every request — agent turns,
+  # sub-agents and structured calls alike. Unset = backend default.
+  # The anthropic kind takes temperature and top_p only and refuses the rest.
+  # params:
+  #   temperature: 1.0
+  #   top_p: 0.95
+  #   top_k: 20                 # not an OpenAI field; vLLM/OpenRouter accept it
+  #   reasoning_effort: medium  # values are the model's own
+  #   extra_body:               # merged into the body last, wins over the above
+  #     chat_template_kwargs: {enable_thinking: true}   # vLLM
+  #     provider: {order: [deepinfra], allow_fallbacks: false}  # OpenRouter pinning
+
+agent:
+  # Inline system prompt (wins over system_prompt_file when non-empty).
+  system_prompt: ""
+  # Prompt file inside prompts.dir; embedded default when missing on disk.
+  # When the run registers no tool at all (tools.enabled empty), the default
+  # system.md — which promises tools — is replaced by system_notools.md: a model told it has tools it cannot call
+  # ends its turn on a tool call and answers nothing. A file named here
+  # explicitly is always used as is.
+  system_prompt_file: "system.md"
+  max_iterations: 10
+  # History sent to the model: at most history_window messages and, when
+  # history_chars > 0, about that many characters of text, tool arguments
+  # and tool results. The window starts on an exchange boundary (a tool
+  # call always travels with its results). On overflow it is cut down to
+  # history_trim_to of the caps and then kept as is until it overflows
+  # again, so the request prefix stays stable for prefix caching
+  # (1 = slide by the minimum every request). history_pin_task keeps the
+  # first user message (the task) in front of the window: set it for long
+  # tool loops, where the task would otherwise scroll out.
+  history_window: 40
+  history_chars: 0
+  history_trim_to: 0.75
+  history_pin_task: false
+  session_ttl: 24h
+  max_sessions: 1000
+  # Keep conversations on disk (one JSONL file per session) so they survive
+  # a restart; "" = in memory only. With it set, the TTL and the cap only
+  # drop the in-memory copy: a session is loaded back when used again.
+  session_dir: ""
+  # Response cap in tokens (0 = provider default).
+  max_tokens: 0
+  # Concurrent tool executions per turn.
+  max_parallel_tools: 8
+  # Tool results larger than this (bytes, JSON-encoded) are truncated for
+  # the model with a marker; the client stream keeps the full payload.
+  max_tool_result_bytes: 32768
+  # Keep the model's thinking in the conversation so reasoning-capable
+  # models continue their chain of thought across turns (OpenAI-compatible
+  # endpoints replay it as reasoning_details). Stripped automatically when
+  # the history window compacts. Default: true.
+  preserve_reasoning: true
+
+# Tools. `enabled` selects built-ins by name; unknown names fail loudly.
+# Available:
+#   web_fetch    open a URL as text; HTML keeps its links so the agent can
+#                follow them (there is no search tool in the core: bring a
+#                search API as your own tool or an MCP server)
+#   read_file / write_file / list_files
+#                the session workspace; reads parse pdf, docx, xlsx, csv, json
+#   bash         a shell in the session workspace (opt-in below)
+# plus memory_search (requires memory.enabled and mode tool|both).
+tools:
+  enabled: [web_fetch, read_file, write_file, list_files]
+  # File tools: per-session workspace directories (also bash's workdir).
+  files:
+    dir: data/workspace
+  # web_fetch: block_private refuses loopback/private targets (anti-SSRF) —
+  # keep it on for public-facing deployments. page_chars is how much text one
+  # call returns; the model reads the rest with offset. Set user_agent to your
+  # own name and contact URL for anything beyond local testing: many sites
+  # refuse anonymous clients.
+  web_fetch:
+    timeout_s: 15
+    max_bytes: 2097152
+    page_chars: 12000
+    block_private: true
+    user_agent: ""
+  # bash: a shell in the session workspace. Dangerous and not a sandbox:
+  # opt-in required even when listed in enabled.
+  bash:
+    enabled: false
+    timeout_s: 60
+  # MCP servers: their tools join the registry at startup. Transports:
+  # streamable-http (url), sse (url), stdio (command + args + env).
+  # tool_prefix avoids name clashes; tools restricts the list; read_only
+  # names tools that are safe to run without approval (besides
+  # those the server annotates readOnlyHint). For an environment whose
+  # tools depend on call order, set agent.max_parallel_tools: 1 — a batch
+  # then runs one call at a time in the order the model gave.
+  mcp_servers: []
+  #  - name: docs
+  #    url: http://127.0.0.1:8000/mcp
+  #    read_only: [search, get_page]
+
+# Memory access points. The memory engine is deliberately out of core —
+# these are the two ports (bring your own memory):
+#   injection: augment the system prompt before each turn
+#   tool:      expose memory_search to the model
+#   both:      both ports active
+# Store:
+#   in-memory: ephemeral, dev/tests
+#   files:    markdown notes (dir below) — one .md per fact with YAML
+#             frontmatter, human-editable, lexical search; embeddings are
+#             a port (external embedder), none ships with the harness
+memory:
+  enabled: false
+  mode: both
+  store: in-memory
+  dir: data/memory
+
+prompts:
+  # Directory with .md prompt overrides; embedded defaults serve the rest.
+  dir: prompts
+
+# Trajectory recording: one JSONL file per session (<session>.jsonl) with
+# every step, tool I/O, token usage and latency. "" disables tracing.
+trace:
+  dir: data/traces
+  # requests: true also stores the exact request that produced the turn's
+  # final answer (messages, system, tools). Off by default: it repeats the
+  # history in the file, and only offline analysis needs it.
+  requests: false
