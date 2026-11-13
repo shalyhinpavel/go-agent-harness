@@ -238,13 +238,13 @@ func window(text string, offset, size int) (string, int, int) {
 }
 
 // nonPublicNets lists ranges that net.IP's predicates miss: "this network"
-// (0.0.0.0/8) and carrier-grade NAT (100.64.0.0/10), where cloud providers
-// keep internal services.
+// (0.0.0.0/8), carrier-grade NAT (100.64.0.0/10), where cloud providers keep
+// internal services, and the deprecated IPv6 site-local range (fec0::/10).
 type ipNets []*net.IPNet
 
 var nonPublicNets = func() ipNets {
 	var nets ipNets
-	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10"} {
+	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10", "fec0::/10"} {
 		_, n, _ := net.ParseCIDR(cidr)
 		nets = append(nets, n)
 	}
@@ -260,6 +260,30 @@ func (n ipNets) contains(ip net.IP) bool {
 	return false
 }
 
+var (
+	_, nat64Net, _     = net.ParseCIDR("64:ff9b::/96")
+	_, sixToFourNet, _ = net.ParseCIDR("2002::/16")
+)
+
+// embeddedIPv4 returns the IPv4 address that a NAT64 (64:ff9b::/96) or 6to4
+// (2002::/16) address stands for, or nil. The gateway that routes such an
+// address connects to that IPv4 target, so the target is what gets checked.
+// Blocking the prefixes outright would also refuse public IPv4 sites, which
+// DNS64 synthesises under the NAT64 prefix on IPv6-only networks.
+func embeddedIPv4(ip net.IP) net.IP {
+	ip16 := ip.To16()
+	if ip.To4() != nil || ip16 == nil {
+		return nil
+	}
+	switch {
+	case nat64Net.Contains(ip):
+		return net.IP(ip16[12:16])
+	case sixToFourNet.Contains(ip):
+		return net.IP(ip16[2:6])
+	}
+	return nil
+}
+
 // guardPrivateAddress refuses connections to anything that is not a
 // public address — the anti-SSRF core of the tool.
 func guardPrivateAddress(address string) error {
@@ -270,6 +294,9 @@ func guardPrivateAddress(address string) error {
 	ip := net.ParseIP(host)
 	if ip == nil {
 		return nil // non-IP (unix sockets etc.) — let the dialer decide
+	}
+	if v4 := embeddedIPv4(ip); v4 != nil {
+		ip = v4
 	}
 	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsMulticast() || ip.IsUnspecified() || nonPublicNets.contains(ip) {
 		return fmt.Errorf("web_fetch: refusing non-public address %s", host)

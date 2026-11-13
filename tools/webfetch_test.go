@@ -147,12 +147,19 @@ func TestGuardPrivateAddress(t *testing.T) {
 		"127.0.0.1:80", "10.0.0.5:80", "192.168.1.1:443", "169.254.169.254:80",
 		"100.64.0.1:80", "100.127.255.254:80", "0.1.2.3:80", "224.0.0.1:80",
 		"[::1]:80", "[fe80::1]:80", "[ff02::1]:80", "[::ffff:10.0.0.1]:80",
+		// NAT64 and 6to4 carry an IPv4 target that the gateway reaches for us:
+		// 127.0.0.1 and 169.254.169.254 inside each. Site-local is deprecated
+		// but still routable on old networks.
+		"[64:ff9b::7f00:1]:443", "[64:ff9b::a9fe:a9fe]:80", "[2002:7f00:1::1]:80", "[2002:a9fe:a9fe::1]:80",
+		"[fec0::1]:80",
 	} {
 		if err := guardPrivateAddress(addr); err == nil {
 			t.Errorf("%s must be refused", addr)
 		}
 	}
-	for _, addr := range []string{"93.184.216.34:443", "100.63.255.255:80", "100.128.0.1:80", "[2606:4700::1111]:443"} {
+	// Public IPv4 reached through NAT64 (DNS64 synthesises these on IPv6-only
+	// networks) and through 6to4 must keep working.
+	for _, addr := range []string{"93.184.216.34:443", "100.63.255.255:80", "100.128.0.1:80", "[2606:4700::1111]:443", "[64:ff9b::808:808]:443", "[2002:808:808::1]:443"} {
 		if err := guardPrivateAddress(addr); err != nil {
 			t.Errorf("%s must pass: %v", addr, err)
 		}
