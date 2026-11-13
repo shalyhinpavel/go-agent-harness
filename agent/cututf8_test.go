@@ -7,7 +7,7 @@ import (
 )
 
 func TestCutUTF8_NeverSplitsACharacter(t *testing.T) {
-	s := strings.Repeat("жук", 50) // two bytes per letter
+	s := strings.Repeat("αβγ", 50) // two bytes per letter
 	for n := 1; n < len(s); n++ {
 		got := cutUTF8(s, n)
 		if !utf8.ValidString(got) || len(got) > n {
