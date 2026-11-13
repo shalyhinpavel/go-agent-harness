@@ -19,7 +19,7 @@ func TestOf_PlainIDsAreUntouched(t *testing.T) {
 func TestOf_DifferentIDsNeverShareAName(t *testing.T) {
 	ids := []string{
 		"team/1", "team:1", "team.1", "team-1", "team 1", "../team-1", "TEAM-1", "Team-1", "A", "a",
-		"привет", "你好", "a@b.c", "a-b.c", strings.Repeat("a", 101), strings.Repeat("a", 102),
+		"αβγδεζ", "你好", "a@b.c", "a-b.c", strings.Repeat("a", 101), strings.Repeat("a", 102),
 	}
 	seen := map[string]string{}
 	for _, id := range ids {

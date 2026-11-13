@@ -174,8 +174,8 @@ func TestFileStore_HostileIDStaysInsideDir(t *testing.T) {
 }
 
 func TestTokenize_AnyScript(t *testing.T) {
-	got := tokenize("Grüße, Привет! 東京 42 a")
-	for _, want := range []string{"grüße", "привет", "東京", "42"} {
+	got := tokenize("Grüße, Αβγδεζ! 東京 42 a")
+	for _, want := range []string{"grüße", "αβγδεζ", "東京", "42"} {
 		if !got[want] {
 			t.Errorf("token %q missing from %v", want, got)
 		}

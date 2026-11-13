@@ -74,7 +74,7 @@ func TestWebFetch_ReadsPageAndFollowsRedirect(t *testing.T) {
 func TestWebFetch_PagesLongTextWithOffset(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte(strings.Repeat("абвгд", 100))) // 500 characters, multi-byte
+		_, _ = w.Write([]byte(strings.Repeat("αβγδε", 100))) // 500 characters, multi-byte
 	}))
 	defer srv.Close()
 
