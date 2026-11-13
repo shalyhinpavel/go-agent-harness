@@ -30,7 +30,7 @@ Use it in two ways:
    one-shot prompts, an HTTP + SSE server, and a live backend conformance
    checker.
 
-Requires Go 1.25+. Pre-v1: minor releases may adjust APIs as they settle.
+Requires Go 1.26+. Pre-v1: minor releases may adjust APIs as they settle.
 
 ---
 
